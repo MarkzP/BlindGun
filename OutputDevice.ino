@@ -1,6 +1,4 @@
 
-// Default is to behave as a Joystick; Uncomment to turn this into a funny mouse
-//#define USE_MOUSE
 
 #define JOY_MAX    1023
 #define JOY_MID    511
@@ -23,14 +21,13 @@ void initOutputDevice()
   Joystick.Zrotate(JOY_MID);
   Joystick.hat(-1);
 
-  #ifdef USE_MOUSE
-    Mouse.screenSize(MOUSE_MAX, MOUSE_MAX);
-  #endif  
+  Mouse.screenSize(MOUSE_MAX, MOUSE_MAX);
 }
 
 void setButtonState(uint8_t button, bool val)
 {
-  #ifdef USE_MOUSE
+  if (useMouse)
+  {
     if (val)
     {
       switch (button)
@@ -49,10 +46,11 @@ void setButtonState(uint8_t button, bool val)
         case 3: Mouse.release(MOUSE_MIDDLE); break;
       } 
     }
-  
-  #else
+  }
+  else
+  {
     Joystick.button(button, val);
-  #endif
+  }
 }
 
 void sendPosition()
@@ -65,16 +63,19 @@ void sendPosition()
     pos_y = 1.0f;
   }
   
-  #ifdef USE_MOUSE
+  if (useMouse)
+  {
     if (onscreen || wasOnscreen)
     {
       Mouse.moveTo(pos_x * MOUSE_MAX, pos_y * MOUSE_MAX);
     }
-  #else
+  }
+  else
+  {
     Joystick.X(pos_x * JOY_MAX);
     Joystick.Y(pos_y * JOY_MAX);
     Joystick.send_now();    
-  #endif
+  }
 
   wasOnscreen = onscreen;
 }

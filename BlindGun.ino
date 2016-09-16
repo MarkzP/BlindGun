@@ -11,6 +11,8 @@
  *
  * If you build one (or two), let me know!
  * 
+ * USB Type should be "Keyboard + Mouse + Joystick"
+ * 
  * To calibrate the screen area:
  *  -Point to the upper left corner
  *  -Hold the trigger until the led comes on
@@ -18,14 +20,16 @@
  *  -Release the trigger
  *  -Don't move from where you are! This is a blind gun; really, it has nu idea what (or where) you are shooting at
  *  
+ * To switch between joystick & mouse mode:
+ *  -Hold both the trigger & button 1 until led flashes quickly
+ *  
  * If it starts to drift or becomed somewhat unuseable, just put the gun down for ~10 sec. This will recalibrate the sensors.
  *
  * This code is released under GPL v3.0: https://gnu.org/licenses/gpl-3.0.txt
  * 
  *************************************************************************************/
 
-
-#include "DCM.h"
+bool useMouse = false;
 
 //0.0 = top/left, 1.0 = bottom/right
 float pos_x = 0;
@@ -33,13 +37,13 @@ float pos_y = 0;
 
 bool calibrating = false;
 
-float yaw, pitch;
+float yaw, pitch, roll; //absolute orientation angles from AHRS
 
 float relativeYaw;
 float relativePitch;
 
-float yawZero = 1.0f;
-float yawRange = 0.3f;
+float yawZero = 1.0f; //Where the screen start (in rads)
+float yawRange = 0.3f; //How wide the screen is (in rads)
 float pitchZero = 0.0f;
 float pitchRange = 0.25f;
 
@@ -53,18 +57,17 @@ float pitchRange = 0.25f;
 //
 // If you don't have a mag, don't worry, it will still work, but it will drift a tiny bit.
 
-float cal[16]; // 0-8=offsets, 9=field strength, 10-15=soft iron map
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
-
   delay(1000);
-  
+
   initButtons();
   initOrientation();
   initSensors();
   initOutputDevice();
 
+  //Flash!
   digitalWrite(LED_BUILTIN, HIGH);
   delay(50);
   digitalWrite(LED_BUILTIN, LOW);
@@ -82,13 +85,7 @@ void loop() {
     #else
     
       updateOrientation();
-      checkButtons();
-  
-      if (calibrating)
-      {
-        return;
-      }
-      
+      checkButtons();      
       sendPosition();
     #endif      
   }

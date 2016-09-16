@@ -1,11 +1,11 @@
 
 #include <EEPROM.h>
+#include "DCM.h"
 
 #define EADR 0x00
 #define eepr_magic 0xF00C
 
 DCM dcm;
-
 
 void loadPitchYaw()
 {
@@ -49,6 +49,7 @@ void updateOrientation()
 
   yaw = -dcm.yaw;
   pitch = dcm.pitch;
+  roll = dcm.roll;
 
   //Compute angles relative to screen area
   relativePitch = pitch - pitchZero;

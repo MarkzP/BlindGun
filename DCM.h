@@ -55,6 +55,7 @@ class DCM
     #define Ki_YAW 0.00002f
 
     #define MOTION_FILTER 0.01f
+    #define MOTION_THRESHOLD 0.004f
     #define GYRO_SAMPLE_COUNT 128
 		
 		// Sensor variables

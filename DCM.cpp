@@ -1,5 +1,5 @@
 /***************************************************************************************************************
-* Razor AHRS Firmware v1.4.2
+* Razor AHRS Firmware v1.4.2 (heavily modified for this project!)
 * 9 Degree of Measurement Attitude and Heading Reference System
 * for Sparkfun "9DOF Razor IMU" (SEN-10125 and SEN-10736)
 * and "9DOF Sensor Stick" (SEN-10183, 10321 and SEN-10724)
@@ -16,16 +16,6 @@
 *   * Original code (http://code.google.com/p/sf9domahrs/) by Doug Weibel and Jose Julio,
 *     based on ArduIMU v1.5 by Jordi Munoz and William Premerlani, Jose Julio 
 */
-
-/*
-  
-  Positive yaw   : clockwise
-  Positive roll  : right wing down
-  Positive pitch : nose up
-  
-  Transformation order: first yaw then pitch then roll.
-*/
-
 
 #include "DCM.h"
 #include <Arduino.h>
@@ -129,7 +119,10 @@ void DCM::detectMotion(void)
   float gyroSum = abs(gyro[0]) + abs(gyro[1]) + abs(gyro[2]);
   gyroAvg = (gyroAvg * (1.0f - MOTION_FILTER)) + gyroSum * MOTION_FILTER;
   motionAvg = (motionAvg * (1.0f - MOTION_FILTER)) + abs(gyroAvg - gyroSum) * MOTION_FILTER;
-  motion = motionAvg > (motion ? 0.004f : 0.200f);
+
+  //Serial.println(motionAvg, 5);
+  
+  motion = motionAvg > MOTION_THRESHOLD + (motion ? 0.0f : 0.2f);
 }
 
 void DCM::computeGyroBias(void)
@@ -291,6 +284,8 @@ void DCM::driftCorrection(void)
   	// Dynamic weighting of accelerometer info (reliability filter)
   	// Weight for accelerometer info (<0.5G = 0.0, 1G = 1.0 , >1.5G = 0.0)
   	//Accel_weight = constrain(1 - 2*abs(1 - Accel_magnitude),0,1);  //
+
+    // Modified to account for off-center sensors; accels are trusted only between 0.75 & 1.25g
     Accel_weight = constrain(1 - 4*abs(1 - Accel_magnitude),0,1);  
 
     Vector_Cross_Product(&errorRollPitch[0],&accel[0],&DCM_Matrix[2][0]); //adjust the ground of reference

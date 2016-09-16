@@ -3,6 +3,8 @@
 //
 // However the code could be quickly ported to any 9dof platform
 // The extra methods are there so the sensor can be calibrated using the MotionCal software
+//
+// If using an actual Teensy Prop Shield http://www.pjrc.com/store/prop_shield.html , you could get rid off all this!
 
 #include <SparkFunLSM9DS1.h>
 #include <Wire.h>
@@ -10,24 +12,28 @@
 #include <util/crc16.h>
 #include <EEPROM.h>
 
-#define INT1_PIN        2    //Gyro Data Ready Interrupt
-#define CS_AG_PIN       4
+#define INT1_PIN        2    //Gyro Data Ready Interrupt (optional, improves stability)
+#define CS_AG_PIN       4    //Comment this to use I2C instead
 #define CS_M_PIN        3
 
 #define TO_RAD(x) (x * PI / 180.0f)
 
-#define CAL_EEADDR  20
+#define CAL_EEADDR  60
 #define CAL_SIZE    68
 
-//These values are used to convert raw values to the ranges expected by the calibration application.
+//These values are used to convert raw values to the ranges expected by the MotionCal application.
 #define G_PER_COUNT            0.0001220703125f  // = 1/8192
 #define DEG_PER_SEC_PER_COUNT  0.0625f  // = 1/16
 #define UT_PER_COUNT           0.1f
 
-
+float cal[16]; // 0-8=offsets, 9=field strength, 10-15=soft iron map
 byte caldata[68]; // buffer to receive magnetic calibration data
 byte calcount=0;
 int loopcount = 0;
+
+int ledState = LOW;
+int ledFastblinks = 0;
+elapsedMillis ledMillis = 0;
 
 LSM9DS1 imu;
 
@@ -63,8 +69,8 @@ bool initSensors()
   imu.settings.mag.sampleRate = 7; //80 hz
   imu.settings.mag.tempCompensationEnable = true;
   
-  imu.settings.mag.XYPerformance = 2;
-  imu.settings.mag.ZPerformance = 2;
+  imu.settings.mag.XYPerformance = 3;
+  imu.settings.mag.ZPerformance = 3;
   
   if (!imu.begin())
   {
@@ -106,46 +112,6 @@ void readSensors(float& ax, float& ay, float& az, float& gx, float& gy, float& g
   gz = TO_RAD(gz);
 }
 
-void printSensorsRaw()
-{
-  int ax, ay, az;
-  int gx, gy, gz;
-  int mx, my, mz;
-  
-  imu.readGyro();
-  imu.readAccel();
-  imu.readMag();    
-
-  ax = imu.calcAccel(imu.ax) / G_PER_COUNT;
-  ay = -imu.calcAccel(imu.ay) / G_PER_COUNT;
-  az = imu.calcAccel(imu.az) / G_PER_COUNT;
-  gx = imu.calcGyro(imu.gx) / DEG_PER_SEC_PER_COUNT;
-  gy = -imu.calcGyro(imu.gy) / DEG_PER_SEC_PER_COUNT;
-  gz = imu.calcGyro(imu.gz) / DEG_PER_SEC_PER_COUNT;
-  mx = -imu.calcMag(imu.mx) / (UT_PER_COUNT / 100.0f);
-  my = -imu.calcMag(imu.my) / (UT_PER_COUNT / 100.0f);
-  mz = imu.calcMag(imu.mz) / (UT_PER_COUNT / 100.0f);
-
-  Serial.print("Raw:");
-  Serial.print(ax);
-  Serial.print(',');
-  Serial.print(ay);
-  Serial.print(',');
-  Serial.print(az);
-  Serial.print(',');
-  Serial.print(gx);
-  Serial.print(',');
-  Serial.print(gy);
-  Serial.print(',');
-  Serial.print(gz);
-  Serial.print(',');
-  Serial.print(mx);
-  Serial.print(',');
-  Serial.print(my);
-  Serial.print(',');
-  Serial.print(mz);
-  Serial.println();
-}
 
 void loadCalibration()
 {
@@ -171,7 +137,43 @@ void loadCalibration()
 void doMagCalibration()
 {  
   // get and print uncalibrated data
-  printSensorsRaw();  
+  int ax, ay, az;
+  int gx, gy, gz;
+  int mx, my, mz;
+  
+  imu.readGyro();
+  imu.readAccel();
+  imu.readMag();    
+
+  ax = imu.calcAccel(imu.ax) / G_PER_COUNT;
+  ay = -imu.calcAccel(imu.ay) / G_PER_COUNT;
+  az = imu.calcAccel(imu.az) / G_PER_COUNT;
+  gx = imu.calcGyro(imu.gx) / DEG_PER_SEC_PER_COUNT;
+  gy = -imu.calcGyro(imu.gy) / DEG_PER_SEC_PER_COUNT;
+  gz = imu.calcGyro(imu.gz) / DEG_PER_SEC_PER_COUNT;
+  mx = -imu.calcMag(imu.mx) / (UT_PER_COUNT / 100.0f); //LSM uses milliGauss
+  my = -imu.calcMag(imu.my) / (UT_PER_COUNT / 100.0f);
+  mz = imu.calcMag(imu.mz) / (UT_PER_COUNT / 100.0f);
+
+  Serial.print("Raw:");
+  Serial.print(ax);
+  Serial.print(',');
+  Serial.print(ay);
+  Serial.print(',');
+  Serial.print(az);
+  Serial.print(',');
+  Serial.print(gx);
+  Serial.print(',');
+  Serial.print(gy);
+  Serial.print(',');
+  Serial.print(gz);
+  Serial.print(',');
+  Serial.print(mx);
+  Serial.print(',');
+  Serial.print(my);
+  Serial.print(',');
+  Serial.print(mz);
+  Serial.println();
 
   
   loopcount = loopcount + 1;
@@ -180,7 +182,7 @@ void doMagCalibration()
   receiveCalibration();
 
   // occasionally print calibration
-  if (loopcount == 100) {
+  if (loopcount == 50) {
     Serial.print("Cal1:");
     for (int i=0; i<9; i++) {
       Serial.print(cal[i], 3);
@@ -188,7 +190,7 @@ void doMagCalibration()
     }
     Serial.println(cal[9], 3);
   }
-  if (loopcount >= 200) {
+  if (loopcount >= 100) {
     Serial.print("Cal2:");
     Serial.print(cal[10], 4); Serial.print(',');
     Serial.print(cal[13], 4); Serial.print(',');
@@ -200,6 +202,22 @@ void doMagCalibration()
     Serial.print(cal[15], 4); Serial.print(',');
     Serial.println(cal[12], 4);
     loopcount = 0;
+  }
+
+  // blink LED, slow normally, fast when calibration written
+  if (ledMillis >= 1000) {
+    if (ledFastblinks > 0) {
+      ledFastblinks = ledFastblinks - 1;
+      ledMillis -= 125;
+    } else {
+      ledMillis -= 1000;
+    }
+    if (ledState == LOW) {
+      ledState = HIGH;
+    } else {
+      ledState = LOW;
+    }
+    digitalWrite(LED_BUILTIN, ledState);
   }
 }
 
@@ -234,7 +252,9 @@ void receiveCalibration() {
       for (j=0; j < CAL_SIZE; j++) {
         EEPROM.write(CAL_EEADDR + j, caldata[j]);
       }
-      memcpy(cal, caldata+2, sizeof(cal));
+      loopcount = 10000;
+      calcount = 0;
+      ledFastblinks = 16; // Toggle LED faster the next 16 times
       return;
     }
     // look for the 117,84 in the data, before discarding
